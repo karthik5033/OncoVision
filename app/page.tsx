@@ -1,101 +1,179 @@
-import Image from "next/image";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Brain, Activity, FileText, CheckCircle2 } from "lucide-react";
 
-export default function Home() {
+const recentScans = [
+  {
+    id: "PT-8492",
+    date: "2026-04-18",
+    type: "Glioblastoma",
+    risk: "High",
+    status: "Reviewed",
+  },
+  {
+    id: "PT-8493",
+    date: "2026-04-18",
+    type: "Meningioma",
+    risk: "Low",
+    status: "Pending",
+  },
+  {
+    id: "PT-8494",
+    date: "2026-04-17",
+    type: "Astrocytoma",
+    risk: "Medium",
+    status: "Reviewed",
+  },
+  {
+    id: "PT-8495",
+    date: "2026-04-17",
+    type: "Pituitary Adenoma",
+    risk: "Low",
+    status: "Reviewed",
+  },
+  {
+    id: "PT-8496",
+    date: "2026-04-16",
+    type: "Oligodendroglioma",
+    risk: "High",
+    status: "Pending Analysis",
+  },
+];
+
+export default function Dashboard() {
+  const today = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="flex flex-col gap-8 p-8 pb-20">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          Patient Overview
+        </h1>
+        <p className="text-sm text-text-secondary mt-1">{today}</p>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-primary shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 text-muted-foreground pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total Scans Analyzed
+            </CardTitle>
+            <Brain className="h-4 w-4" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">1,284</div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-destructive shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 text-muted-foreground pb-2">
+            <CardTitle className="text-sm font-medium">
+              High Risk Cases
+            </CardTitle>
+            <Activity className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">23</div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-primary shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 text-muted-foreground pb-2">
+            <CardTitle className="text-sm font-medium">
+              Reports Generated
+            </CardTitle>
+            <FileText className="h-4 w-4" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">891</div>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-success shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 text-muted-foreground pb-2">
+            <CardTitle className="text-sm font-medium">
+              Avg. Prediction Accuracy
+            </CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-success" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">94.2%</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-7">
+        <Card className="md:col-span-4 shadow-sm border border-border rounded-xl">
+          <CardHeader>
+            <CardTitle>Recent Patient Scans</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Patient ID</TableHead>
+                  <TableHead>Scan Date</TableHead>
+                  <TableHead>Tumor Type</TableHead>
+                  <TableHead>Risk Level</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentScans.map((scan) => (
+                  <TableRow key={scan.id}>
+                    <TableCell className="font-medium">{scan.id}</TableCell>
+                    <TableCell className="text-text-secondary">{scan.date}</TableCell>
+                    <TableCell>{scan.type}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          scan.risk === "High"
+                            ? "destructive"
+                            : scan.risk === "Medium"
+                            ? "default"
+                            : "secondary"
+                        }
+                        className={
+                          scan.risk === "Medium"
+                            ? "bg-warning text-white hover:bg-warning/80"
+                            : scan.risk === "Low"
+                            ? "bg-success hover:bg-success/80 text-white"
+                            : ""
+                        }
+                      >
+                        {scan.risk}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-text-secondary">{scan.status}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+        <Card className="md:col-span-3 shadow-sm border border-border rounded-xl">
+          <CardHeader>
+            <CardTitle>Risk Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex h-[300px] items-center justify-center rounded-lg bg-muted border border-border border-dashed">
+              <span className="text-muted-foreground font-medium">
+                Chart coming soon
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
