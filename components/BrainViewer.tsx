@@ -85,46 +85,116 @@ export default function BrainViewer({
         brainModel = gltf.scene;
 
         brainModel.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            child.geometry.computeVertexNormals();
+          if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
 
-            // Highly Visible Glowing Base
-            child.material = new THREE.MeshStandardMaterial({
-              color: 0x052040,
-              emissive: 0x004488,
-              emissiveIntensity: 0.8,
-              roughness: 0.2,
-              metalness: 0.5,
-              transparent: true,
-              opacity: 0.4,
-              side: THREE.DoubleSide,
-              depthWrite: false,
-              blending: THREE.AdditiveBlending
+            const isPoints = child instanceof THREE.Points;
+            const hasVertexColors = !!child.geometry.attributes.color;
+
+            // The Ultimate Solid X-Ray Shader
+            // This shader uses fully opaque points for perfect 3D geometry and sharp wrinkles,
+            // avoiding any glitchy slicing artifacts. To make the tumor visible through the opaque
+            // shell, it uses an advanced Depth Hack to pull the red points forward in clip space.
+            const customMat = new THREE.ShaderMaterial({
+              uniforms: {
+                tumorCenter: { value: new THREE.Vector3(260.0, -10.0, 223.0) },
+                tumorRadius: { value: 0.0 },
+              },
+              vertexShader: `
+                uniform vec3 tumorCenter;
+                uniform float tumorRadius;
+                
+                ${hasVertexColors ? 'attribute vec3 color;' : ''}
+                
+                varying vec3 vColor;
+                
+                void main() {
+                  // Extract grayscale luminance (wrinkle topography) from baked colors
+                  ${hasVertexColors 
+                    ? 'float gray = dot(color, vec3(0.299, 0.587, 0.114));' 
+                    : 'float gray = 0.5;'
+                  }
+                  
+                  // Enhance contrast for sharp, distinct gyri/sulci, but soften slightly 
+                  // to avoid amplifying the AI-generated voxel noise
+                  float detail = smoothstep(0.1, 0.9, gray);
+                  
+                  // Clinical Holo-Palette
+                  vec3 shadowBlue = vec3(0.01, 0.04, 0.15); // Deep crevices
+                  vec3 ridgeCyan  = vec3(0.0, 0.65, 1.0);   // Bright ridges
+                  vec3 baseCol = mix(shadowBlue, ridgeCyan, detail);
+                  
+                  // Volumetric Rim Light
+                  vec3 normalDir = normalize(position - vec3(225.0, -22.0, 200.0));
+                  vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+                  vec3 viewDir = normalize(-mvPos.xyz);
+                  float fresnel = 1.0 - abs(dot(viewDir, normalize(normalMatrix * normalDir)));
+                  fresnel = pow(fresnel, 2.0);
+                  baseCol += vec3(0.1, 0.5, 0.9) * fresnel * 0.7;
+                  
+                  // Tumor Distance & Intensity
+                  float dist = distance(position, tumorCenter);
+                  float intensity = 1.0 - smoothstep(tumorRadius * 0.1, tumorRadius, dist);
+                  
+                  // Tumor Core Gradient
+                  vec3 tumorCol = mix(vec3(0.8, 0.0, 0.1), vec3(1.0, 0.9, 0.2), intensity);
+                  
+                  // Final Color
+                  vColor = mix(baseCol, tumorCol, intensity);
+                  
+                  // Calculate raw projection
+                  vec4 projectedPos = projectionMatrix * mvPos;
+                  
+                  // X-RAY DEPTH HACK: 
+                  // If this point is part of the tumor (intensity > 0), pull it forward 
+                  // towards the camera in the depth buffer. This allows the red tumor 
+                  // to render ON TOP of the opaque blue brain surface, making it visible 
+                  // from any angle without needing glitchy transparency!
+                  projectedPos.z -= intensity * 0.15 * projectedPos.w;
+                  
+                  gl_Position = projectedPos;
+                  
+                  // MASSIVE POINT SIZE: The AI point cloud is generated in discrete vertical slices.
+                  // We must use a large enough point size to physically bridge the gaps between 
+                  // these slices. If the points are too small, the gaps create "stacked plate" artifacts.
+                  ${isPoints ? 'gl_PointSize = 4.2 * (8.0 / -mvPos.z);' : ''}
+                }
+              `,
+              fragmentShader: `
+                varying vec3 vColor;
+                void main() {
+                  ${isPoints ? `
+                    vec2 xy = gl_PointCoord.xy - vec2(0.5);
+                    if (length(xy) > 0.5) discard; // Keep points perfectly circular
+                  ` : ''}
+                  // Fully opaque for perfect depth-sorting and sharp wrinkle definition
+                  gl_FragColor = vec4(vColor, 1.0);
+                }
+              `,
+              transparent: false,
+              depthWrite: true, 
+              depthTest: true,
             });
 
-            // Bright Wireframe to define the wrinkles clearly
-            const wireframeMat = new THREE.MeshBasicMaterial({
-              color: 0x00ffff,
-              wireframe: true,
-              transparent: true,
-              opacity: 0.35, 
-              blending: THREE.AdditiveBlending,
-              depthWrite: false
-            });
-            const wireMesh = new THREE.Mesh(child.geometry, wireframeMat);
-            child.add(wireMesh);
+            child.material = customMat;
+            child.material.userData.customUniforms = customMat.uniforms;
           }
         });
 
-        // Scale up slightly to fill the viewer better
-        brainModel.scale.set(1.8, 1.8, 1.8);
-
-        // Orient the fsaverage surface (Y is anterior, Z is superior)
-        brainModel.rotation.x = -Math.PI / 2; 
-        brainModel.rotation.y = -Math.PI / 8;
-        brainModel.rotation.x += 0.2; 
+        // Auto-center and normalize scale
+        const box = new THREE.Box3().setFromObject(brainModel);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
         
-        brainGroup.add(brainModel);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const desiredScale = 5.0 / maxDim;
+        
+        brainModel.position.sub(center);
+
+        const wrapper = new THREE.Group();
+        wrapper.add(brainModel);
+        wrapper.scale.set(desiredScale, desiredScale, desiredScale);
+        
+        brainGroup.add(wrapper);
       },
       undefined,
       (error) => {
@@ -134,73 +204,8 @@ export default function BrainViewer({
 
     scene.add(brainGroup);
 
-    // --- PROCEDURAL TUMOR (Malignant Core) ---
-    const tumorGroup = new THREE.Group();
-    // Positioned securely inside the right hemisphere of the scaled brain
-    tumorGroup.position.set(1.0, 0.4, 0.4); 
-    
-    const tumorGeom = new THREE.IcosahedronGeometry(0.8, 32);
-    const tPos = tumorGeom.attributes.position;
-    for (let i = 0; i < tPos.count; i++) {
-        const x = tPos.getX(i);
-        const y = tPos.getY(i);
-        const z = tPos.getZ(i);
-        
-        let noise = Math.sin(x * 8) * Math.cos(y * 8) * Math.sin(z * 8) * 0.15;
-        noise += Math.sin(x * 15 + y * 15) * 0.08;
-        
-        const tempV = new THREE.Vector3(x, y, z).normalize().multiplyScalar(1.0 + noise);
-        tPos.setXYZ(i, tempV.x, tempV.y, tempV.z);
-    }
-    tumorGeom.computeVertexNormals();
 
-    const tumorMat = new THREE.MeshStandardMaterial({
-      color: 0xff1133,
-      emissive: 0x880011,
-      emissiveIntensity: 0.6,
-      roughness: 0.8,
-      metalness: 0.0,
-    });
-    const tumorMesh = new THREE.Mesh(tumorGeom, tumorMat);
-
-    // Glowing Halo for Tumor
-    const glowMat = new THREE.ShaderMaterial({
-      uniforms: { color: { value: new THREE.Color("#ff0022") } },
-      vertexShader: `
-        varying vec3 vNormal;
-        varying vec3 vViewPosition;
-        void main() {
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          vViewPosition = -mvPosition.xyz;
-          vNormal = normalize(normalMatrix * normal);
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 color;
-        varying vec3 vNormal;
-        varying vec3 vViewPosition;
-        void main() {
-          vec3 normal = normalize(vNormal);
-          vec3 viewDir = normalize(vViewPosition);
-          float rim = 1.0 - max(dot(viewDir, normal), 0.0);
-          float intensity = pow(rim, 3.5);
-          gl_FragColor = vec4(color, intensity * 0.5);
-        }
-      `,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-    const glowMesh = new THREE.Mesh(tumorGeom, glowMat);
-    glowMesh.scale.set(1.15, 1.15, 1.15);
-
-    tumorGroup.add(tumorMesh);
-    tumorGroup.add(glowMesh);
-    
     let currentScale = propsRef.current.tumorScale;
-    tumorGroup.scale.set(currentScale, currentScale, currentScale);
-    scene.add(tumorGroup);
 
     // ANIMATION LOOP
     const clock = new THREE.Clock();
@@ -214,21 +219,24 @@ export default function BrainViewer({
       const time = clock.getElapsedTime();
       const p = propsRef.current;
 
-      // Organic rotation for tumor
-      tumorGroup.rotation.y = Math.sin(time * 0.5) * 0.1;
-      tumorGroup.rotation.z = Math.cos(time * 0.3) * 0.05;
-
+      // Calculate the current dynamic size of the tumor
       if (p.mode === "pulse") {
         const pulse = Math.sin(time * 3) * 0.05;
-        const scale = p.tumorScale + pulse;
-        tumorGroup.scale.set(scale, scale, scale);
-        currentScale = p.tumorScale; 
+        currentScale = p.tumorScale + pulse;
       } else if (p.mode === "simulate") {
         currentScale = THREE.MathUtils.lerp(currentScale, p.targetScale, 0.02);
-        tumorGroup.scale.set(currentScale, currentScale, currentScale);
       } else {
         currentScale = THREE.MathUtils.lerp(currentScale, p.tumorScale, 0.1);
-        tumorGroup.scale.set(currentScale, currentScale, currentScale);
+      }
+
+      // Update the shader uniform for all brain meshes or points
+      if (brainModel) {
+        brainModel.traverse((child) => {
+          if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && child.material.userData.customUniforms) {
+             // Map currentScale (0.0 - 1.0) to model-space radius (0 - 80 units)
+             child.material.userData.customUniforms.tumorRadius.value = currentScale * 80.0;
+          }
+        });
       }
 
       renderer.render(scene, camera);
@@ -256,9 +264,7 @@ export default function BrainViewer({
         mountRef.current.removeChild(renderer.domElement);
       }
       renderer.dispose();
-      tumorGeom.dispose();
-      tumorMat.dispose();
-      glowMat.dispose();
+
     };
   }, []);
 
