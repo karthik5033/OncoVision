@@ -80,7 +80,7 @@ export default function BrainViewer({
 
     // Use a cache-buster so Next.js doesn't serve a 404 if it cached the empty public directory at startup
     loader.load(
-      "/brain.glb?v=" + Date.now(),
+      "/brainModel101.glb?v=" + Date.now(),
       (gltf) => {
         brainModel = gltf.scene;
 
@@ -103,60 +103,44 @@ export default function BrainViewer({
                 uniform vec3 tumorCenter;
                 uniform float tumorRadius;
                 
-                ${hasVertexColors ? 'attribute vec3 color;' : ''}
+                ${hasVertexColors ? 'attribute vec4 color;' : ''}
                 
                 varying vec3 vColor;
                 
                 void main() {
-                  // Extract grayscale luminance (wrinkle topography) from baked colors
+                  // CRITICAL: Use the native colors of brainModel101.glb to perfectly replicate
+                  // the 'good model view' and preserve its beautifully baked wrinkles!
                   ${hasVertexColors 
-                    ? 'float gray = dot(color, vec3(0.299, 0.587, 0.114));' 
-                    : 'float gray = 0.5;'
+                    ? 'vec3 baseCol = color.rgb;' 
+                    : 'vec3 baseCol = vec3(0.1, 0.4, 0.8);'
                   }
                   
-                  // Enhance contrast for sharp, distinct gyri/sulci, but soften slightly 
-                  // to avoid amplifying the AI-generated voxel noise
-                  float detail = smoothstep(0.1, 0.9, gray);
-                  
-                  // Clinical Holo-Palette
-                  vec3 shadowBlue = vec3(0.01, 0.04, 0.15); // Deep crevices
-                  vec3 ridgeCyan  = vec3(0.0, 0.65, 1.0);   // Bright ridges
-                  vec3 baseCol = mix(shadowBlue, ridgeCyan, detail);
-                  
-                  // Volumetric Rim Light
+                  // Soft Volumetric Rim Light to give depth to the point cloud
                   vec3 normalDir = normalize(position - vec3(225.0, -22.0, 200.0));
                   vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
                   vec3 viewDir = normalize(-mvPos.xyz);
                   float fresnel = 1.0 - abs(dot(viewDir, normalize(normalMatrix * normalDir)));
                   fresnel = pow(fresnel, 2.0);
-                  baseCol += vec3(0.1, 0.5, 0.9) * fresnel * 0.7;
+                  baseCol += baseCol * fresnel * 0.6; 
                   
                   // Tumor Distance & Intensity
                   float dist = distance(position, tumorCenter);
+                  
+                  // Smooth highlight gradient
                   float intensity = 1.0 - smoothstep(tumorRadius * 0.1, tumorRadius, dist);
                   
-                  // Tumor Core Gradient
-                  vec3 tumorCol = mix(vec3(0.8, 0.0, 0.1), vec3(1.0, 0.9, 0.2), intensity);
+                  // Tumor Glow Overlay (Warm yellow/red)
+                  vec3 tumorCol = mix(vec3(0.8, 0.0, 0.1), vec3(1.0, 0.8, 0.1), intensity);
                   
-                  // Final Color
-                  vColor = mix(baseCol, tumorCol, intensity);
+                  // Additive blend the tumor over the native brain colors to highlight the surface
+                  // properly without destroying the details underneath.
+                  vColor = baseCol + (tumorCol * intensity * 1.5);
                   
-                  // Calculate raw projection
-                  vec4 projectedPos = projectionMatrix * mvPos;
+                  // NO depth hack. Let the points render naturally to avoid bulging.
+                  gl_Position = projectionMatrix * mvPos;
                   
-                  // X-RAY DEPTH HACK: 
-                  // If this point is part of the tumor (intensity > 0), pull it forward 
-                  // towards the camera in the depth buffer. This allows the red tumor 
-                  // to render ON TOP of the opaque blue brain surface, making it visible 
-                  // from any angle without needing glitchy transparency!
-                  projectedPos.z -= intensity * 0.15 * projectedPos.w;
-                  
-                  gl_Position = projectedPos;
-                  
-                  // MASSIVE POINT SIZE: The AI point cloud is generated in discrete vertical slices.
-                  // We must use a large enough point size to physically bridge the gaps between 
-                  // these slices. If the points are too small, the gaps create "stacked plate" artifacts.
-                  ${isPoints ? 'gl_PointSize = 4.2 * (8.0 / -mvPos.z);' : ''}
+                  // Smooth, dense point size to fix the 'worst pixel' look
+                  ${isPoints ? 'gl_PointSize = 4.0 * (8.0 / -mvPos.z);' : ''}
                 }
               `,
               fragmentShader: `
@@ -164,9 +148,9 @@ export default function BrainViewer({
                 void main() {
                   ${isPoints ? `
                     vec2 xy = gl_PointCoord.xy - vec2(0.5);
-                    if (length(xy) > 0.5) discard; // Keep points perfectly circular
+                    // Discard corners to make perfectly smooth circular points!
+                    if (length(xy) > 0.5) discard;
                   ` : ''}
-                  // Fully opaque for perfect depth-sorting and sharp wrinkle definition
                   gl_FragColor = vec4(vColor, 1.0);
                 }
               `,
@@ -233,8 +217,8 @@ export default function BrainViewer({
       if (brainModel) {
         brainModel.traverse((child) => {
           if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && child.material.userData.customUniforms) {
-             // Map currentScale (0.0 - 1.0) to model-space radius (0 - 80 units)
-             child.material.userData.customUniforms.tumorRadius.value = currentScale * 80.0;
+             // Map currentScale (0.0 - 1.0) to model-space radius (0 - 250 units) to ensure strong surface visibility
+             child.material.userData.customUniforms.tumorRadius.value = currentScale * 250.0;
           }
         });
       }
